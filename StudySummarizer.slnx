@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="StudySummarizer.Application/StudySummarizer.Application.csproj" />
+  <Project Path="StudySummarizer.Domain/StudySummarizer.Domain.csproj" />
+  <Project Path="StudySummarizer.Infrastructure/StudySummarizer.Infrastructure.csproj" />
+  <Project Path="StudySummarizer/StudySummarizer.csproj" />
+</Solution>
