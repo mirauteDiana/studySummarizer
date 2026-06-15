@@ -1,3 +1,4 @@
+using ErrorOr;
 using Microsoft.AspNetCore.Mvc;
 using StudySummarizer.Application.DTOs;
 using StudySummarizer.Application.Interfaces;
@@ -17,28 +18,12 @@ public class DocumentsController : ControllerBase
 
     [HttpPost]
     [Consumes("multipart/form-data")]
-    public async Task<IActionResult> Upload([FromForm] string title, IFormFile file)
+    public async Task<IActionResult> Upload([FromForm] UploadDocumentRequest request)
     {
-        if (string.IsNullOrWhiteSpace(title))
-            return BadRequest(new { message = "Title is required." });
-
-        if (file is null || file.Length == 0)
-            return BadRequest(new { message = "A file is required." });
-
-        var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".pdf", ".docx", ".txt" };
-        var ext = Path.GetExtension(file.FileName);
-        if (!allowed.Contains(ext))
-            return BadRequest(new { message = $"File type not allowed. Accepted: {string.Join(", ", allowed)}" });
-
-        var request = new UploadDocumentRequest
-        {
-            Title = title,
-            FileStream = file.OpenReadStream(),
-            FileName = file.FileName,
-        };
-
-        var id = await _documentService.UploadAsync(request);
-        return Ok(new { message = "Document uploaded successfully", id });
+        var result = await _documentService.UploadAsync(request);
+        return result.Match(
+            id => Ok(new { message = "Document uploaded successfully", id }),
+            errors => Problem(errors));
     }
 
     [HttpGet]
@@ -51,25 +36,43 @@ public class DocumentsController : ControllerBase
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id)
     {
-        var document = await _documentService.GetByIdAsync(id);
-        return document is null ? NotFound() : Ok(document);
+        var result = await _documentService.GetByIdAsync(id);
+        return result.Match(Ok, errors => Problem(errors));
     }
 
     [HttpGet("{id:guid}/file")]
     public async Task<IActionResult> DownloadFile(Guid id)
     {
         var result = await _documentService.DownloadAsync(id);
-        if (result is null)
-            return NotFound();
-
-        var (stream, contentType, fileName) = result.Value;
-        return File(stream, contentType, fileName);
+        return result.Match<IActionResult>(
+            value => File(value.stream, value.contentType, value.fileName),
+            Problem);
     }
 
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id)
     {
-        var deleted = await _documentService.DeleteAsync(id);
-        return deleted ? Ok(new { message = "Document deleted successfully" }) : NotFound();
+        var result = await _documentService.DeleteAsync(id);
+        return result.Match(
+            _ => Ok(new { message = "Document deleted successfully" }),
+            errors => Problem(errors));
+    }
+
+    private ObjectResult Problem(List<Error> errors)
+    {
+        if (errors.Count == 0)
+            return Problem(statusCode: StatusCodes.Status500InternalServerError);
+
+        var first = errors[0];
+        var statusCode = first.Type switch
+        {
+            ErrorType.NotFound => StatusCodes.Status404NotFound,
+            ErrorType.Validation => StatusCodes.Status400BadRequest,
+            ErrorType.Conflict => StatusCodes.Status409Conflict,
+            ErrorType.Unauthorized => StatusCodes.Status401Unauthorized,
+            _ => StatusCodes.Status500InternalServerError
+        };
+
+        return Problem(statusCode: statusCode, title: first.Code, detail: first.Description);
     }
 }

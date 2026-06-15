@@ -1,3 +1,5 @@
+using AutoMapper;
+using ErrorOr;
 using StudySummarizer.Application.DTOs;
 using StudySummarizer.Application.Interfaces;
 using StudySummarizer.Domain.Entities;
@@ -10,38 +12,41 @@ public class DocumentService : IDocumentService
 {
     private readonly IDocumentRepository _documentRepository;
     private readonly IFileStorageService _fileStorageService;
+    private readonly IMapper _mapper;
 
-    public DocumentService(IDocumentRepository documentRepository, IFileStorageService fileStorageService)
+    public DocumentService(IDocumentRepository documentRepository, IFileStorageService fileStorageService, IMapper mapper)
     {
         _documentRepository = documentRepository;
         _fileStorageService = fileStorageService;
+        _mapper = mapper;
     }
 
-    public async Task<Guid> UploadAsync(UploadDocumentRequest request)
+    public async Task<ErrorOr<Guid>> UploadAsync(UploadDocumentRequest request)
     {
-        var id = Guid.NewGuid();
-        var ext = Path.GetExtension(request.FileName).ToLowerInvariant();
-        var storageKey = $"{id}{ext}";
-
-        var savedKey = await _fileStorageService.SaveAsync(request.FileStream, storageKey);
+        var ext = Path.GetExtension(request.File!.FileName).ToLowerInvariant();
 
         var fileType = ext switch
         {
-            ".pdf" => FileType.Pdf,
+            ".pdf" => (FileType?)FileType.Pdf,
             ".docx" => FileType.Docx,
             ".txt" => FileType.Txt,
-            _ => throw new InvalidOperationException($"Unsupported file type: {ext}")
+            _ => null
         };
+
+        if (fileType is null)
+            return Error.Validation("Document.UnsupportedFileType", $"Unsupported file type: {ext}");
 
         var document = new Document
         {
-            Id = id,
             Title = request.Title,
-            FileType = fileType,
-            FilePath = savedKey,
+            FileType = fileType.Value,
             Status = DocumentStatus.Pending,
             UploadDate = DateTime.UtcNow
         };
+
+        var storageKey = $"{document.Id}{ext}";
+        var savedKey = await _fileStorageService.SaveAsync(request.File.OpenReadStream(), storageKey);
+        document.FilePath = savedKey;
 
         try
         {
@@ -54,26 +59,29 @@ public class DocumentService : IDocumentService
             throw;
         }
 
-        return id;
+        return document.Id;
     }
 
-    public async Task<DocumentResponse?> GetByIdAsync(Guid id)
+    public async Task<ErrorOr<DocumentResponse>> GetByIdAsync(Guid id)
     {
         var document = await _documentRepository.GetByIdAsync(id);
-        return document is null ? null : MapToResponse(document);
+        if (document is null)
+            return Error.NotFound("Document.NotFound", $"Document {id} was not found.");
+
+        return _mapper.Map<DocumentResponse>(document);
     }
 
     public async Task<IEnumerable<DocumentResponse>> GetAllAsync()
     {
         var documents = await _documentRepository.GetAllAsync();
-        return documents.Select(MapToResponse);
+        return _mapper.Map<IEnumerable<DocumentResponse>>(documents);
     }
 
-    public async Task<(Stream stream, string contentType, string fileName)?> DownloadAsync(Guid id)
+    public async Task<ErrorOr<(Stream stream, string contentType, string fileName)>> DownloadAsync(Guid id)
     {
         var document = await _documentRepository.GetByIdAsync(id);
         if (document is null)
-            return null;
+            return Error.NotFound("Document.NotFound", $"Document {id} was not found.");
 
         Stream stream;
         try
@@ -82,7 +90,7 @@ public class DocumentService : IDocumentService
         }
         catch (FileNotFoundException)
         {
-            return null;
+            return Error.NotFound("Document.FileNotFound", $"The file for document {id} is missing from storage.");
         }
 
         var ext = Path.GetExtension(document.FilePath).ToLowerInvariant();
@@ -99,27 +107,18 @@ public class DocumentService : IDocumentService
         return (stream, contentType, fileName);
     }
 
-    public async Task<bool> DeleteAsync(Guid id)
+    public async Task<ErrorOr<Deleted>> DeleteAsync(Guid id)
     {
         var document = await _documentRepository.GetByIdAsync(id);
         if (document is null)
-            return false;
-
-        var filePath = document.FilePath;
-        _fileStorageService.Delete(filePath);
+            return Error.NotFound("Document.NotFound", $"Document {id} was not found.");
 
         await _documentRepository.DeleteAsync(document);
         await _documentRepository.SaveChangesAsync();
 
-        return true;
+        _fileStorageService.Delete(document.FilePath);
+
+        return Result.Deleted;
     }
 
-    private static DocumentResponse MapToResponse(Document document) => new()
-    {
-        Id = document.Id,
-        Title = document.Title,
-        FileType = document.FileType,
-        Status = document.Status,
-        UploadDate = document.UploadDate,
-    };
 }
