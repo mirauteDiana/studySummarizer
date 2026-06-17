@@ -25,7 +25,7 @@ public class DocumentRepository : IDocumentRepository
 
     public Task DeleteAsync(Document doc)
     {
-        _context.Documents.Remove(doc);
+        doc.IsDeleted = true;
         return Task.CompletedTask;
     }
 

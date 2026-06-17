@@ -41,7 +41,7 @@ public class DocumentService : IDocumentService
             Title = request.Title,
             FileType = fileType.Value,
             Status = DocumentStatus.Pending,
-            UploadDate = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow
         };
 
         var storageKey = $"{document.Id}{ext}";
@@ -53,9 +53,13 @@ public class DocumentService : IDocumentService
             await _documentRepository.AddAsync(document);
             await _documentRepository.SaveChangesAsync();
         }
-        catch
+        catch (Exception dbEx)
         {
-            _fileStorageService.Delete(savedKey);
+            try { _fileStorageService.Delete(savedKey); }
+            catch (Exception storageEx)
+            {
+                throw new AggregateException(dbEx, storageEx);
+            }
             throw;
         }
 
@@ -93,15 +97,15 @@ public class DocumentService : IDocumentService
             return Error.NotFound("Document.FileNotFound", $"The file for document {id} is missing from storage.");
         }
 
-        var ext = Path.GetExtension(document.FilePath).ToLowerInvariant();
-        var contentType = ext switch
+        var contentType = document.FileType switch
         {
-            ".pdf" => "application/pdf",
-            ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            ".txt" => "text/plain",
+            FileType.Pdf => "application/pdf",
+            FileType.Docx => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            FileType.Txt => "text/plain",
             _ => "application/octet-stream"
         };
 
+        var ext = Path.GetExtension(document.FilePath).ToLowerInvariant();
         var fileName = $"{document.Title}{ext}";
 
         return (stream, contentType, fileName);
@@ -115,8 +119,6 @@ public class DocumentService : IDocumentService
 
         await _documentRepository.DeleteAsync(document);
         await _documentRepository.SaveChangesAsync();
-
-        _fileStorageService.Delete(document.FilePath);
 
         return Result.Deleted;
     }

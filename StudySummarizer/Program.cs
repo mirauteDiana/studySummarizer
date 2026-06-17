@@ -37,11 +37,15 @@ builder.Services.AddCors(options =>
             policy.WithOrigins("https://localhost").AllowAnyMethod().AllowAnyHeader();
     }));
 
-var dbPath = Path.Combine(builder.Environment.ContentRootPath, "studysummarizer.db");
+var dbFileName = builder.Configuration["Database:FileName"]
+    ?? throw new InvalidOperationException("Configuration key 'Database:FileName' is required.");
+var dbPath = Path.Combine(builder.Environment.ContentRootPath, dbFileName);
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite($"Data Source={dbPath}"));
 
-var uploadPath = Path.Combine(builder.Environment.ContentRootPath, "uploads");
+var uploadFolder = builder.Configuration["Storage:UploadPath"]
+    ?? throw new InvalidOperationException("Configuration key 'Storage:UploadPath' is required.");
+var uploadPath = Path.Combine(builder.Environment.ContentRootPath, uploadFolder);
 builder.Services.AddSingleton<IFileStorageService>(_ => new LocalFileStorageService(uploadPath));
 
 builder.Services.AddAutoMapper(cfg => cfg.AddProfile<DocumentMappingProfile>());
@@ -57,7 +61,7 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
+    db.Database.Migrate();
 }
 
 app.UseExceptionHandler(err => err.Run(async ctx =>

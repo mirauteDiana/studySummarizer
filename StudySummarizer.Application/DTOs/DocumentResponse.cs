@@ -8,5 +8,5 @@ public class DocumentResponse
     public string Title { get; set; } = string.Empty;
     public FileType FileType { get; set; }
     public DocumentStatus Status { get; set; }
-    public DateTime UploadDate { get; set; }
+    public DateTime CreatedAt { get; set; }
 }

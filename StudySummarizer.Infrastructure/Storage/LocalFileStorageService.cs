@@ -18,7 +18,7 @@ public class LocalFileStorageService : IFileStorageService
     public async Task<string> SaveAsync(Stream stream, string fileName)
     {
         var filePath = ResolveSafePath(fileName);
-        await using var fileStream = new FileStream(filePath, FileMode.Create);
+        await using var fileStream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, useAsync: true);
         await stream.CopyToAsync(fileStream);
         return fileName;
     }
@@ -26,7 +26,7 @@ public class LocalFileStorageService : IFileStorageService
     public Task<Stream> OpenReadAsync(string storageKey)
     {
         var filePath = ResolveSafePath(storageKey);
-        Stream stream = File.OpenRead(filePath);
+        Stream stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
         return Task.FromResult(stream);
     }
 
