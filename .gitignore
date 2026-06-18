@@ -280,7 +280,7 @@ ServiceFabricBackup/
 *.db-wal
 
 # User-uploaded files
-**/wwwroot/uploads/
+**/uploads/
 
 # Business Intelligence projects
 *.rdl.data
