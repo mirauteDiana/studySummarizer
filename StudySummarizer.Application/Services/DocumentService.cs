@@ -44,24 +44,24 @@ public class DocumentService : IDocumentService
             CreatedAt = DateTime.UtcNow
         };
 
-        var storageKey = $"{document.Id}{ext}";
-        var savedKey = await _fileStorageService.SaveAsync(request.File.OpenReadStream(), storageKey);
-        document.FilePath = savedKey;
+        await _documentRepository.AddAsync(document);
+        await _documentRepository.SaveChangesAsync();
 
+        var storageKey = $"{document.Id}{ext}";
+        string savedKey;
         try
         {
-            await _documentRepository.AddAsync(document);
-            await _documentRepository.SaveChangesAsync();
+            savedKey = await _fileStorageService.SaveAsync(request.File.OpenReadStream(), storageKey);
         }
-        catch (Exception dbEx)
+        catch
         {
-            try { _fileStorageService.Delete(savedKey); }
-            catch (Exception storageEx)
-            {
-                throw new AggregateException(dbEx, storageEx);
-            }
+            await _documentRepository.DeleteAsync(document);
+            await _documentRepository.SaveChangesAsync();
             throw;
         }
+
+        document.FilePath = savedKey;
+        await _documentRepository.SaveChangesAsync();
 
         return document.Id;
     }
