@@ -10,10 +10,12 @@ namespace StudySummarizer.API.Controllers;
 public class DocumentsController : ControllerBase
 {
     private readonly IDocumentService _documentService;
+    private readonly ISummarizationService _summarizationService;
 
-    public DocumentsController(IDocumentService documentService)
+    public DocumentsController(IDocumentService documentService, ISummarizationService summarizationService)
     {
         _documentService = documentService;
+        _summarizationService = summarizationService;
     }
 
     [HttpPost]
@@ -55,6 +57,31 @@ public class DocumentsController : ControllerBase
         var result = await _documentService.DeleteAsync(id);
         return result.Match(
             _ => Ok(new { message = "Document deleted successfully" }),
+            errors => Problem(errors));
+    }
+
+    [HttpPost("{documentId:guid}/summarize")]
+    public async Task<IActionResult> Summarize(Guid documentId, [FromBody] SummarizeRequest request)
+    {
+        var result = await _summarizationService.StartAsync(documentId, request);
+        return result.Match(
+            _ => Ok(new { message = "Document summarized successfully", documentId }),
+            errors => Problem(errors));
+    }
+
+    [HttpGet("{documentId:guid}/summary")]
+    public async Task<IActionResult> GetSummary(Guid documentId)
+    {
+        var result = await _summarizationService.GetAsync(documentId);
+        return result.Match(Ok, errors => Problem(errors));
+    }
+
+    [HttpPatch("{documentId:guid}/summary")]
+    public async Task<IActionResult> RegenerateSummary(Guid documentId, [FromBody] SummarizeRequest request)
+    {
+        var result = await _summarizationService.RegenerateAsync(documentId, request);
+        return result.Match(
+            _ => Ok(new { message = "Summary regenerated successfully" }),
             errors => Problem(errors));
     }
 

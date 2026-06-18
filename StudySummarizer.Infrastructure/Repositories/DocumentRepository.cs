@@ -18,7 +18,7 @@ public class DocumentRepository : IDocumentRepository
         await _context.Documents.ToListAsync();
 
     public async Task<Document?> GetByIdAsync(Guid id) =>
-        await _context.Documents.FindAsync(id);
+        await _context.Documents.FirstOrDefaultAsync(d => d.Id == id);
 
     public async Task AddAsync(Document doc) =>
         await _context.Documents.AddAsync(doc);
