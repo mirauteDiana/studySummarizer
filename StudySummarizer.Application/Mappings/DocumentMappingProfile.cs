@@ -9,5 +9,7 @@ public class DocumentMappingProfile : Profile
     public DocumentMappingProfile()
     {
         CreateMap<Document, DocumentResponse>();
+        CreateMap<DocumentResponse, UserDocumentResponse>()
+            .ForMember(dest => dest.DocumentId, opt => opt.MapFrom(src => src.Id));
     }
 }

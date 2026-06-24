@@ -9,28 +9,28 @@ namespace StudySummarizer.Application.Services;
 
 public class SummarizationService : ISummarizationService
 {
-    private readonly IDocumentRepository _documentRepository;
+    private readonly IDocumentService _documentService;
     private readonly ISummaryRepository _summaryRepository;
     private readonly IFileStorageService _fileStorageService;
     private readonly ILlamaClient _llamaClient;
 
     public SummarizationService(
-        IDocumentRepository documentRepository,
+        IDocumentService documentService,
         ISummaryRepository summaryRepository,
         IFileStorageService fileStorageService,
         ILlamaClient llamaClient)
     {
-        _documentRepository = documentRepository;
+        _documentService = documentService;
         _summaryRepository = summaryRepository;
         _fileStorageService = fileStorageService;
         _llamaClient = llamaClient;
     }
 
-    public async Task<ErrorOr<Success>> StartAsync(Guid documentId, SummarizeRequest request)
+    public async Task<ErrorOr<Success>> StartAsync(Guid documentId, SummarizeRequest request, Guid userId)
     {
-        var document = await _documentRepository.GetByIdAsync(documentId);
-        if (document is null)
-            return Error.NotFound("Document.NotFound", $"Document {documentId} was not found.");
+        var result = await _documentService.GetOwnedAsync(documentId, userId);
+        if (result.IsError) return result.Errors;
+        var document = result.Value;
 
         if (document.FileType != FileType.Txt)
             return Error.Validation("Summary.UnsupportedFileType", "Only .txt documents support summarization at this time.");
@@ -42,11 +42,11 @@ public class SummarizationService : ISummarizationService
         return await GenerateAndSaveAsync(document, request.SummaryType, existing: null);
     }
 
-    public async Task<ErrorOr<SummaryResponse>> GetAsync(Guid documentId)
+    public async Task<ErrorOr<SummaryResponse>> GetAsync(Guid documentId, Guid userId)
     {
-        var document = await _documentRepository.GetByIdAsync(documentId);
-        if (document is null)
-            return Error.NotFound("Document.NotFound", $"Document {documentId} was not found.");
+        var result = await _documentService.GetOwnedAsync(documentId, userId);
+        if (result.IsError) return result.Errors;
+        var document = result.Value;
 
         var summary = await _summaryRepository.GetByDocumentIdAsync(documentId);
         if (summary is null)
@@ -62,11 +62,11 @@ public class SummarizationService : ISummarizationService
         };
     }
 
-    public async Task<ErrorOr<Success>> RegenerateAsync(Guid documentId, SummarizeRequest request)
+    public async Task<ErrorOr<Success>> RegenerateAsync(Guid documentId, SummarizeRequest request, Guid userId)
     {
-        var document = await _documentRepository.GetByIdAsync(documentId);
-        if (document is null)
-            return Error.NotFound("Document.NotFound", $"Document {documentId} was not found.");
+        var result = await _documentService.GetOwnedAsync(documentId, userId);
+        if (result.IsError) return result.Errors;
+        var document = result.Value;
 
         if (document.FileType != FileType.Txt)
             return Error.Validation("Summary.UnsupportedFileType", "Only .txt documents support summarization at this time.");
@@ -123,7 +123,7 @@ public class SummarizationService : ISummarizationService
         }
 
         document.Status = DocumentStatus.Summarized;
-        await _documentRepository.SaveChangesAsync();
+        await _summaryRepository.SaveChangesAsync();
 
         return Result.Success;
     }

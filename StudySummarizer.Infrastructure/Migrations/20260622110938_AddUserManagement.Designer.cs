@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using StudySummarizer.Infrastructure.Persistence;
 
@@ -10,9 +11,11 @@ using StudySummarizer.Infrastructure.Persistence;
 namespace StudySummarizer.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260622110938_AddUserManagement")]
+    partial class AddUserManagement
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.9");
@@ -50,7 +53,7 @@ namespace StudySummarizer.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Documents", (string)null);
+                    b.ToTable("Documents");
                 });
 
             modelBuilder.Entity("StudySummarizer.Domain.Entities.Summary", b =>
@@ -80,7 +83,7 @@ namespace StudySummarizer.Infrastructure.Migrations
                     b.HasIndex("DocumentId")
                         .IsUnique();
 
-                    b.ToTable("Summaries", (string)null);
+                    b.ToTable("Summaries");
                 });
 
             modelBuilder.Entity("StudySummarizer.Domain.Entities.User", b =>
@@ -112,7 +115,7 @@ namespace StudySummarizer.Infrastructure.Migrations
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.ToTable("Users", (string)null);
+                    b.ToTable("Users");
                 });
 
             modelBuilder.Entity("StudySummarizer.Domain.Entities.Document", b =>

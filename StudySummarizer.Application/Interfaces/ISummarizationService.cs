@@ -5,7 +5,7 @@ namespace StudySummarizer.Application.Interfaces;
 
 public interface ISummarizationService
 {
-    Task<ErrorOr<Success>> StartAsync(Guid documentId, SummarizeRequest request);
-    Task<ErrorOr<SummaryResponse>> GetAsync(Guid documentId);
-    Task<ErrorOr<Success>> RegenerateAsync(Guid documentId, SummarizeRequest request);
+    Task<ErrorOr<Success>> StartAsync(Guid documentId, SummarizeRequest request, Guid userId);
+    Task<ErrorOr<SummaryResponse>> GetAsync(Guid documentId, Guid userId);
+    Task<ErrorOr<Success>> RegenerateAsync(Guid documentId, SummarizeRequest request, Guid userId);
 }
