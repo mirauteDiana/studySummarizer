@@ -96,7 +96,13 @@ builder.Services.AddHttpClient<ILlamaClient, OllamaClient>((sp, client) =>
 });
 
 var jwtSection = builder.Configuration.GetSection("Jwt");
-builder.Services.Configure<JwtOptions>(jwtSection);
+builder.Services.AddOptions<JwtOptions>()
+    .Bind(jwtSection)
+    .ValidateDataAnnotations()
+    .Validate(
+        jwt => Encoding.UTF8.GetByteCount(jwt.Secret) >= JwtOptions.MinimumSecretBytes,
+        $"Jwt:Secret must be at least {JwtOptions.MinimumSecretBytes} bytes when encoded as UTF-8.")
+    .ValidateOnStart();
 builder.Services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -104,12 +110,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     {
         var jwt = jwtSection.Get<JwtOptions>()
             ?? throw new InvalidOperationException("Configuration section 'Jwt' is required.");
-
-        if (jwt.Secret == JwtOptions.PlaceholderSecret)
-            throw new InvalidOperationException("Jwt:Secret must be changed from its default placeholder before running the application.");
-
-        if (Encoding.UTF8.GetByteCount(jwt.Secret) < JwtOptions.MinimumSecretBytes)
-            throw new InvalidOperationException($"Jwt:Secret must be at least {JwtOptions.MinimumSecretBytes} bytes to sign tokens with HMAC-SHA256.");
 
         options.MapInboundClaims = false;
         options.TokenValidationParameters = new TokenValidationParameters
