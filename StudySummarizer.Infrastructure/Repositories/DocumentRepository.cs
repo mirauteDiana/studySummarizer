@@ -14,11 +14,11 @@ public class DocumentRepository : IDocumentRepository
         _context = context;
     }
 
-    public async Task<IEnumerable<Document>> GetAllAsync() =>
-        await _context.Documents.ToListAsync();
+    public async Task<IEnumerable<Document>> GetAllByUserIdAsync(Guid userId) =>
+        await _context.Documents.Where(d => d.UserId == userId).ToListAsync();
 
-    public async Task<Document?> GetByIdAsync(Guid id) =>
-        await _context.Documents.FirstOrDefaultAsync(d => d.Id == id);
+    public async Task<Document?> GetByIdAndUserIdAsync(Guid id, Guid userId) =>
+        await _context.Documents.FirstOrDefaultAsync(d => d.Id == id && d.UserId == userId);
 
     public async Task AddAsync(Document doc) =>
         await _context.Documents.AddAsync(doc);

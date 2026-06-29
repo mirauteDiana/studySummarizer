@@ -1,9 +1,18 @@
+using System.Text;
 using AutoMapper;
 using FluentValidation;
 using FluentValidation.AspNetCore;
-using StudySummarizer.Application.Mappings;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
+using StudySummarizer.API.Authentication;
+using StudySummarizer.Domain.Entities;
 using StudySummarizer.Application.Interfaces;
+using StudySummarizer.Application.Mappings;
 using StudySummarizer.Application.Services;
 using StudySummarizer.Application.Validators;
 using StudySummarizer.Domain.Interfaces;
@@ -26,7 +35,19 @@ builder.Services.AddValidatorsFromAssemblyContaining<UploadDocumentFormValidator
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(o =>
-    o.UseInlineDefinitionsForEnums());
+{
+    o.UseInlineDefinitionsForEnums();
+    o.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Enter your JWT token."
+    });
+    o.DocumentFilter<BearerSecurityDocumentFilter>();
+});
 
 builder.Services.AddCors(options =>
     options.AddDefaultPolicy(policy =>
@@ -62,13 +83,52 @@ builder.Services.AddScoped<IDocumentService, DocumentService>();
 builder.Services.AddScoped<ISummaryRepository, SummaryRepository>();
 builder.Services.AddScoped<ISummarizationService, SummarizationService>();
 
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddSingleton<IPasswordHasher<User>, PasswordHasher<User>>();
+builder.Services.AddScoped<IUserService, UserService>();
+
 builder.Services.Configure<OllamaOptions>(builder.Configuration.GetSection("Ollama"));
 builder.Services.AddHttpClient<ILlamaClient, OllamaClient>((sp, client) =>
 {
-    var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<OllamaOptions>>().Value;
+    var options = sp.GetRequiredService<IOptions<OllamaOptions>>().Value;
     client.BaseAddress = new Uri(options.BaseUrl);
     client.Timeout = TimeSpan.FromMinutes(10);
 });
+
+var jwtSection = builder.Configuration.GetSection("Jwt");
+builder.Services.AddOptions<JwtOptions>()
+    .Bind(jwtSection)
+    .ValidateDataAnnotations()
+    .Validate(
+        jwt => Encoding.UTF8.GetByteCount(jwt.Secret) >= JwtOptions.MinimumSecretBytes,
+        $"Jwt:Secret must be at least {JwtOptions.MinimumSecretBytes} bytes when encoded as UTF-8.")
+    .ValidateOnStart();
+builder.Services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        var jwt = jwtSection.Get<JwtOptions>()
+            ?? throw new InvalidOperationException("Configuration section 'Jwt' is required.");
+
+        options.MapInboundClaims = false;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Secret)),
+            ValidateIssuer = true,
+            ValidIssuer = jwt.Issuer,
+            ValidateAudience = true,
+            ValidAudience = jwt.Audience,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero
+        };
+    });
+
+builder.Services.AddAuthorization(options =>
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build());
 
 builder.WebHost.ConfigureKestrel(options =>
     options.Limits.MaxRequestBodySize = 20 * 1024 * 1024);
@@ -96,12 +156,16 @@ app.UseExceptionHandler(err => err.Run(async ctx =>
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(o =>
+    {
+        o.ConfigObject.PersistAuthorization = true;
+    });
 }
 
 app.UseCors();
 app.UseStaticFiles();
 app.UseHttpsRedirection();
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 

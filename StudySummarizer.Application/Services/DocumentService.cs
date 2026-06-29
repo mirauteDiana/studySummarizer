@@ -21,7 +21,7 @@ public class DocumentService : IDocumentService
         _mapper = mapper;
     }
 
-    public async Task<ErrorOr<Guid>> UploadAsync(UploadDocumentRequest request)
+    public async Task<ErrorOr<Guid>> UploadAsync(UploadDocumentRequest request, Guid userId)
     {
         var ext = Path.GetExtension(request.File!.FileName).ToLowerInvariant();
 
@@ -38,6 +38,7 @@ public class DocumentService : IDocumentService
 
         var document = new Document
         {
+            UserId = userId,
             Title = request.Title,
             FileType = fileType.Value,
             Status = DocumentStatus.Pending,
@@ -66,26 +67,24 @@ public class DocumentService : IDocumentService
         return document.Id;
     }
 
-    public async Task<ErrorOr<DocumentResponse>> GetByIdAsync(Guid id)
+    public async Task<ErrorOr<DocumentResponse>> GetByIdAsync(Guid id, Guid userId)
     {
-        var document = await _documentRepository.GetByIdAsync(id);
-        if (document is null)
-            return Error.NotFound("Document.NotFound", $"Document {id} was not found.");
-
-        return _mapper.Map<DocumentResponse>(document);
+        var result = await GetOwnedAsync(id, userId);
+        if (result.IsError) return result.Errors;
+        return _mapper.Map<DocumentResponse>(result.Value);
     }
 
-    public async Task<IEnumerable<DocumentResponse>> GetAllAsync()
+    public async Task<IEnumerable<DocumentResponse>> GetAllAsync(Guid userId)
     {
-        var documents = await _documentRepository.GetAllAsync();
+        var documents = await _documentRepository.GetAllByUserIdAsync(userId);
         return _mapper.Map<IEnumerable<DocumentResponse>>(documents);
     }
 
-    public async Task<ErrorOr<(Stream stream, string contentType, string fileName)>> DownloadAsync(Guid id)
+    public async Task<ErrorOr<(Stream stream, string contentType, string fileName)>> DownloadAsync(Guid id, Guid userId)
     {
-        var document = await _documentRepository.GetByIdAsync(id);
-        if (document is null)
-            return Error.NotFound("Document.NotFound", $"Document {id} was not found.");
+        var result = await GetOwnedAsync(id, userId);
+        if (result.IsError) return result.Errors;
+        var document = result.Value;
 
         Stream stream;
         try
@@ -111,16 +110,23 @@ public class DocumentService : IDocumentService
         return (stream, contentType, fileName);
     }
 
-    public async Task<ErrorOr<Deleted>> DeleteAsync(Guid id)
+    public async Task<ErrorOr<Deleted>> DeleteAsync(Guid id, Guid userId)
     {
-        var document = await _documentRepository.GetByIdAsync(id);
-        if (document is null)
-            return Error.NotFound("Document.NotFound", $"Document {id} was not found.");
+        var result = await GetOwnedAsync(id, userId);
+        if (result.IsError) return result.Errors;
 
-        await _documentRepository.DeleteAsync(document);
+        await _documentRepository.DeleteAsync(result.Value);
         await _documentRepository.SaveChangesAsync();
 
         return Result.Deleted;
     }
 
+    public async Task<ErrorOr<Document>> GetOwnedAsync(Guid id, Guid userId)
+    {
+        var document = await _documentRepository.GetByIdAndUserIdAsync(id, userId);
+        if (document is null)
+            return Error.NotFound("Document.NotFound", $"Document {id} was not found.");
+
+        return document;
+    }
 }

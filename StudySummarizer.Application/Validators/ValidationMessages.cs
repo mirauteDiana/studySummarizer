@@ -11,4 +11,11 @@ public static class ValidationMessages
 
     public static readonly string FileTypeNotAllowed =
         $"File type not allowed. Accepted: {string.Join(", ", AllowedFileExtensions.Order())}";
+
+    public const string UsernameRequired = "Username is required.";
+    public const string EmailRequired = "Email is required.";
+    public const string EmailInvalidFormat = "A valid email address is required.";
+    public const string PasswordRequired = "Password is required.";
+    public const string PasswordTooShort = "Password must be at least 8 characters.";
+    public const string PasswordTooLong = "Password must be at most 256 characters.";
 }
